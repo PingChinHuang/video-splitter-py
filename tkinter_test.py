@@ -21,6 +21,7 @@ class FileSelectionField:
         self.button = ttk.Button(self.fmelbl, text = "...", width = 1,
                                  command = self.btnAskOpenFile)
         self.button.grid(row = 0, column = 1, sticky = W + E)
+        self.setDialogDefaultFileTypes((("", "")))
         
     def btnAskOpenFile(self):
         self.fileName.set(askopenfilename(initialdir = '~',
@@ -70,6 +71,27 @@ class ListField:
                                     command = self.tv.yview())
             self.sv.grid(column = 1, row = 0, sticky = N + W + E + S)
             self.tv.configure(yscrollcommand = self.sv.set)
+            
+class ProgressField:
+    def __init__(self, master, prgbarMaximum, prgbarMode, prgbarOrient):
+        self.fme = ttk.Frame(master)
+        self.fme.grid(sticky = N + W + E + S)
+        self.fme.grid_columnconfigure(1, weight = 1)
+        self.progressString = StringVar()
+        self.ent = ttk.Entry(self.fme, width = 5,
+                             state = 'readonly',
+                             textvariable = self.progressString)
+        self.ent.grid(row = 0, column = 0, sticky = N + W + S + E)
+        self.prgbar = ttk.Progressbar(self.fme, 
+                                      mode = prgbarMode,
+                                      orient = prgbarOrient)
+        self.prgbar["value"] = 0
+        self.prgbar["maximum"] = prgbarMaximum
+        self.prgbar.grid(row = 0, column = 1, sticky = N + W + E + S)
+    
+    def setProgress(self, value):
+        self.prgbar["value"] = value
+        self.progressString.set('{percent}%'.format(percent = value / self.prgbar["maximum"] * 100))
         
 class ClipListField(ListField):
     def __init__(self, master, lblfme_text):
@@ -107,10 +129,11 @@ class ClipListGenerator:
         self.optionsField = OptionsField(master)
         self.clipListField = ClipListField(master, "Clip List")
         
-        fileTypeList = (("", "*.avi"),
-                        ("", "*.mov"),
-                        ("", "*.wmv"),
-                        ("", "*.mp4"))
+        fileTypeList = (("", "*.avi *.AVI"),
+                        ("", "*.mov *.MOV"),
+                        ("", "*.wmv *.WMV"),
+                        ("", "*.mp4 *.MP4"),
+                        ("All Files", "*"))
         self.fileSelectionField.setDialogDefaultFileTypes(fileTypeList)
         
 class VideoSplitter:
@@ -119,20 +142,35 @@ class VideoSplitter:
         master.grid_rowconfigure(1, weight = 1)
         self.fileSelectionField = FileSelectionField(master, "List File")
         self.clipListField = ListField(master)
-        self.progressValue = IntVar()
-        self.prgbar = ttk.Progressbar(master, maximum = 100, 
-                                      mode = 'determinate', 
-                                      variable = self.progressValue)
-        self.prgbar.grid(sticky = N + W + E + S)
+        self.progressField = ProgressField(master, 100, 'determinate', 'horizontal')
+        self.btn = ttk.Button(self.progressField.fme, text = 'Start', 
+                              width = 10,
+                              command = self.btnStartSplitting)
+        self.btn.grid(row = 0, column = 2, sticky = N + W + S + E)
+    
+    def btnStartSplitting(self):
+        self.btn.configure(text = 'Processing...', state = 'disabled')
+        self.setProcessingProgress(50)
+        
+    def setProcessingProgress(self, value):
+        self.progressField.setProgress(value)
+        
+def deleteVideoSplitterWM():
+    rootListGen.focus()
+    topVideoSplitter.destroy()
 
 rootListGen = Tk()
-rootVideoSplitter = Tk()
 rootListGen.title("Clip List Generator")
+rootListGen.geometry('640x480+50+100')
 listGen = ClipListGenerator(rootListGen)
-rootVideoSplitter.title("Video Splitter")
-videoSplitter = VideoSplitter(rootVideoSplitter)
+
+topVideoSplitter = Toplevel()
+topVideoSplitter.title("Video Splitter")
+topVideoSplitter.geometry('640x480+800+100')
+topVideoSplitter.protocol('WM_DELETE_WINDOW', deleteVideoSplitterWM)
+videoSplitter = VideoSplitter(topVideoSplitter)
+
 rootListGen.mainloop()
-rootVideoSplitter.mainloop()
 
 
 
