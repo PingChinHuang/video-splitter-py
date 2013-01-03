@@ -9,9 +9,11 @@ import ttk
 import re
 import subprocess
 import platform
+from time import sleep
 from tkinter import *
 from tkinter.filedialog import *
 from datetime import *
+from threading import Thread
 
 class MultimediaTool:
     def __init__(self):
@@ -43,7 +45,7 @@ class MultimediaTool:
         command = self.extProgram['mplayer'] + ' -nosound -vc dummy -vo null -identify ' + fileName 
         if platform.system() == 'Windows':
             command = self.extProgramPath['mplayer'] + '/' + command
-        return subprocess.check_output(args = command).splitlines()
+        return subprocess.Popen(args = command, stdout = subprocess.PIPE)
     
     def mediaEncoder(self, filename, args):
         pass
@@ -103,11 +105,48 @@ class VideoFileSelectionField(FileSelectionField):
         FileSelectionField.btnAskOpenFile(self)
         if self.fullName.get() == '':
             return
-        #self.multimedia.mediaPlayer(self.fullName.get(), '')
-        #output = self.multimedia.mediaInfo(self.fullName.get())
-        #for i in range(len(output)):
-        #    print(output[i])
+        self.multimedia.mediaPlayer(self.fullName.get(), '')
+        mediaInfo = self.multimedia.mediaInfo(self.fullName.get())
+        t = Thread(target = self.readVideoInfoThread, args = (mediaInfo, ))
+        t.start()
+        t.join(10)
+        self.showVideoInfo()
         
+    def showVideoInfo(self):
+        topVideoInfo = Toplevel()
+        topVideoInfo.title('Video Information')
+        topVideoInfo.resizable(1, 0)
+        topVideoInfo.grid_columnconfigure(1, weight = 1)
+        lbl = {}
+        ent = {}
+        for name in range(len(self.infoName)):
+            lbl[self.infoName[name]] = ttk.Label(topVideoInfo, text = self.infoName[name])
+            ent[self.infoName[name]] = ttk.Entry(topVideoInfo, 
+                                                 textvariable = self.infoValue[self.infoName[name]], 
+                                                 state = 'readonly')
+            lbl[self.infoName[name]].grid(row = name, column = 0, sticky = N + W + E + S)
+            ent[self.infoName[name]].grid(row = name, column = 1, sticky = N + W + E + S)    
+    
+    def readVideoInfoThread(self, mediaInfo):
+        self.infoName = []
+        self.infoValue = {}
+        while True:
+            line = mediaInfo.stdout.readline()
+            if not line:
+                break
+            else:
+                m = re.match('ID_VIDEO_([A-Z]+)\=(.*)', str(line, 'utf-8'))
+                if m != None:
+                    self.infoName.append(m.group(1).rstrip())
+                    self.infoValue[m.group(1).rstrip()] = StringVar()
+                    self.infoValue[m.group(1).rstrip()].set(m.group(2).rstrip())
+                else:
+                    m = re.match('ID_([A-Z]+)\=(.*)', str(line, 'utf-8'))
+                    if m != None:
+                        self.infoName.append(m.group(1).rstrip())
+                        self.infoValue[m.group(1).rstrip()] = StringVar()
+                        self.infoValue[m.group(1).rstrip()].set(m.group(2).rstrip())
+                sleep(0.001)
 
 class OptionsField:
     def __init__(self, master):
@@ -375,7 +414,7 @@ class VideoSplitter:
         jobListFile = open(self.fileSelectionField.getFullName(), "r")
         try:
             while True:
-                clipListFileName = jobListFile.readline().rstrip('\n')
+                clipListFileName = jobListFile.readline().rstrip()
                 filePath, useless = os.path.split(clipListFileName)
                 if not clipListFileName:
                     break;
@@ -383,8 +422,8 @@ class VideoSplitter:
                 self.clipListField.setNodeData(listRoot, clipListFileName)
                 clipListFile = open(clipListFileName, "r")
                 try:
-                    fileName = os.path.splitext(clipListFile.readline().rstrip('\n'))
-                    args = clipListFile.readline().rstrip('\n')
+                    fileName = os.path.splitext(clipListFile.readline().rstrip())
+                    args = clipListFile.readline().rstrip()
                     while True:
                         line = clipListFile.readline().split()
                         if not line:
