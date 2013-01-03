@@ -6,10 +6,51 @@ Created on 2013/1/1
 
 import ttk
 import re
+import subprocess
+import platform
 from tkinter import *
 from tkinter.filedialog import *
 from datetime import *
 
+class MultimediaTool:
+    def __init__(self):
+        if platform.system() == 'Windows':
+           self.extProgram = {'mencoder' : 'mencoder.exe',
+                              'mplayer' : 'mplayer.exe',
+                              'mediaPlayer' : 'mpc-hc.exe',
+                              'fileBrowser' : 'explorer'}
+           self.extProgramPath = {'mencoder' : 'G:/MPlayer-p4-svn-34401',
+                                  'mplayer' : 'G:/MPlayer-p4-svn-34401',
+                                  'mediaPlayer' : 'C:/Program Files (x86)/K-Lite Codec Pack/Media Player Classic'}
+        elif platform.system() == 'Linux':
+            self.extProgram = {'mencoder' : 'mencoder',
+                               'mplayer' : 'mplayer',
+                               'mediaPlayer' : 'gnome-mplayer',
+                               'fileBrowser' : 'nautilus'}
+            
+    def mediaPlayer(self, fileName, args):
+        if fileName == '':
+            return False
+        command = self.extProgram['mediaPlayer'] + ' ' + args + ' ' + fileName
+        if platform.system() == 'Windows':
+            command = self.extProgramPath['mediaPlayer'] + '/' + command
+        mediaPopen = subprocess.Popen(args = command)
+        
+    def mediaInfo(self, fileName):
+        if fileName == '':
+            return False
+        command = self.extProgram['mplayer'] + ' -nosound -vc dummy -vo null -identify ' + fileName 
+        if platform.system() == 'Windows':
+            command = self.extProgramPath['mplayer'] + '/' + command
+        return subprocess.check_output(args = command).splitlines()
+    
+    def mediaEncoder(self, filename, args):
+        pass
+    
+    def fileBrowser(self, initial_dir):
+        command = self.extProgram['fileBrowser'] + ' ' + initial_dir
+        mediaPopen = subprocess.Popen(args = command)
+        
 class FileSelectionField:    
     def __init__(self, master, fmelbl_text):
         self.fmelbl = ttk.LabelFrame(master, text = fmelbl_text)
@@ -34,7 +75,22 @@ class FileSelectionField:
         
     def getFileName(self):
         return self.fileName.get()
+    
+class VideoFileSelectionField(FileSelectionField):
+    def __init__(self, master, fmelbl_text):
+        FileSelectionField.__init__(self, master, fmelbl_text)
+        self.multimedia = MultimediaTool()
         
+    def btnAskOpenFile(self):
+        FileSelectionField.btnAskOpenFile(self)
+        if self.fileName.get() == '':
+            return
+        self.multimedia.mediaPlayer(self.fileName.get(), '')
+        output = self.multimedia.mediaInfo(self.fileName.get())
+        for i in range(len(output)):
+            print(output[i])
+        
+
 class OptionsField:
     def __init__(self, master):
         self.fmelbl = ttk.LabelFrame(master, text = "Options")
@@ -87,6 +143,19 @@ class ListField:
                                     command = self.tv.yview())
             self.sv.grid(column = 1, row = 0, sticky = N + W + E + S)
             self.tv.configure(yscrollcommand = self.sv.set)
+    
+    def createNode(self, node_root):
+        return self.tv.insert(node_root, 'end', None)
+        
+    def setNodeData(self, node, node_data):
+        self.tv.item(node, text = node_data)
+        self.tv.see(node)
+        self.tv.selection_set(node)
+    
+    def deleteNodes(self, root = None):
+        children = self.tv.get_children(root)
+        for i in range(len(children) - 1):
+            self.tv.delete(children[i])
             
 class ProgressField:
     def __init__(self, master, prgbarMaximum, prgbarMode, prgbarOrient):
@@ -116,21 +185,23 @@ class ClipListField(ListField):
         self.lblfme.grid_columnconfigure(0, weight = 1)
         self.lblfme.grid_rowconfigure(0, weight = 1)
         
-        super(ClipListField, self).__init__(self.lblfme)
+        ListField.__init__(self, self.lblfme)
         self.fmeTv.grid_configure(row = 0, column = 0)
+        self.endNode = ClipListField.createNode(self, '')
+        ListField.setNodeData(self, self.endNode, 'No.\tStart\t\tEnd\t\tDuration\t\tDifference')
         
         self.fme = ttk.Frame(self.lblfme)
         self.fme.grid(row = 0, column = 1, sticky = N + W + E + S)
-        self.clipTimeText = ['Start', 'End', 'Duration']
-        self.clipTimeVar = {}
+        self.videoPosText = ['Start', 'End', 'Duration']
+        self.videoPosVar = {}
         self.ent = {}
-        for i in range(len(self.clipTimeText)):
-            self.lblfme = {self.clipTimeText[i] : 
-                           ttk.LabelFrame(self.fme, text = self.clipTimeText[i])}
-            self.lblfme[self.clipTimeText[i]].pack()
-            self.clipTimeVar[self.clipTimeText[i]] = StringVar()
-            self.ent[self.clipTimeText[i]] = ttk.Entry(self.lblfme[self.clipTimeText[i]], width = 10, textvariable = self.clipTimeVar[self.clipTimeText[i]])
-            self.ent[self.clipTimeText[i]].pack()
+        for i in range(len(self.videoPosText)):
+            self.lblfme = {self.videoPosText[i] : 
+                           ttk.LabelFrame(self.fme, text = self.videoPosText[i])}
+            self.lblfme[self.videoPosText[i]].pack()
+            self.videoPosVar[self.videoPosText[i]] = StringVar()
+            self.ent[self.videoPosText[i]] = ttk.Entry(self.lblfme[self.videoPosText[i]], width = 10, textvariable = self.videoPosVar[self.videoPosText[i]])
+            self.ent[self.videoPosText[i]].pack()
         
         self.btnText = ['Add', 'Clear', 'Generate', 'Reset']
         self.btn = {}
@@ -147,65 +218,58 @@ class ClipListField(ListField):
         self.ent['Duration'].configure(state = 'readonly')
         
     def chkTimeFormat(self):
-        if self.clipTimeVar['Start'].get() == '':
-            print("self.clipTimeVar['Start'] is empty")
-            self.ent['Start'].focus()
-            return False
-        if self.clipTimeVar['End'].get() == '':
-            print("self.clipTimeVar['End'] is empty")
-            self.ent['End'].focus()
-            return False
-        if re.match("^([0-2][0-3])([0-5]\d){2}$", self.clipTimeVar['Start'].get()) == None:
-            self.ent['Start'].focus()
-            print("Incorrect Time Format(1)")
-            return False
-        if re.match("^([0-2][0-3])([0-5]\d){2}$", self.clipTimeVar['End'].get()) == None:
-            self.ent['End'].focus()
-            print("Incorrect Time Format(2)")
-            return False
+        for i in range(len(self.videoPosText) - 1):
+            if self.videoPosVar[self.videoPosText[i]].get() == '' or re.match("^([0-2][0-3])([0-5]\d){2}$", self.videoPosVar[self.videoPosText[i]].get()) == None:
+                self.ent[self.videoPosText[i]].focus()
+                return False
         return True
     
     def calculateDuration(self):
-        print("calculate clip duration")
-        startTime = datetime.strptime(self.clipTimeVar['Start'].get(), "%H%M%S")
-        endTime = datetime.strptime(self.clipTimeVar['End'].get(), "%H%M%S")
-        if endTime < startTime:
-            print("End time is less than start time")
+        videoPosition = {}
+        for i in range(len(self.videoPosText) - 1):
+            videoPosition[self.videoPosText[i]] = datetime.strptime(self.videoPosVar[self.videoPosText[i]].get(), "%H%M%S")
+            
+        if videoPosition['End'] < videoPosition['Start']:
+            print("End position is before start position")
             return False
-        durationTime = endTime - startTime
-        self.clipTimeVar['Duration'].set(durationTime)
+        videoDuration = videoPosition['End'] - videoPosition['Start']
+        self.videoPosVar['Duration'].set(videoDuration)
+        
+        self.endNode = ClipListField.createNode(self, '')
+        ClipListField.setNodeData(self, self.endNode, '{num}\t{startPos}\t\t{endPos}\t\t{duration}\t\t{difference}'.format(num = self.tv.index(self.endNode),
+                                                                                                                          startPos = videoPosition['Start'].strftime('%H:%M:%S'),
+                                                                                                                          endPos = videoPosition['End'].strftime('%H:%M:%S'), 
+                                                                                                                          duration = self.videoPosVar['Duration'].get(),
+                                                                                                                          difference = videoDuration.seconds))
         return True
-    
-    def insertClipIntoList(self):
-        pass
 
     def btnAdd(self):
         if not self.chkTimeFormat():
             return
         if not self.calculateDuration():
             return
-        self.insertClipIntoList();
-    
+
     def bindReturn(self, event):
         self.btnAdd()
     
     def btnClear(self):
-        for i in range(len(self.clipTimeText)):
-            self.clipTimeVar[self.clipTimeText[i]].set('')
+        for i in range(len(self.videoPosText)):
+            self.videoPosVar[self.videoPosText[i]].set('')
         self.ent['Start'].focus()
-        print('btnClear')
     
     def btnGenerate(self):
         pass
     
     def btnReset(self):
-        pass
+        self.btnClear()
+        ListField.deleteNodes(self)
+        ListField.setNodeData(self, self.endNode, 'No.\tStart\t\tEnd\t\tDuration\t\tDifference')
         
 class ClipListGenerator:
     def __init__(self, master):
         master.grid_columnconfigure(0, weight = 1)
         master.grid_rowconfigure(2, weight = 1)
-        self.fileSelectionField = FileSelectionField(master, "Target File")
+        self.fileSelectionField = VideoFileSelectionField(master, "Target File")
         self.optionsField = OptionsField(master)
         self.clipListField = ClipListField(master, "Clip List")
         
