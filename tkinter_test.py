@@ -104,13 +104,14 @@ class VideoFileSelectionField(FileSelectionField):
     def btnAskOpenFile(self):
         FileSelectionField.btnAskOpenFile(self)
         if self.fullName.get() == '':
-            return
+            return False
         self.multimedia.mediaPlayer(self.fullName.get(), '')
         mediaInfo = self.multimedia.mediaInfo(self.fullName.get())
         t = Thread(target = self.readVideoInfoThread, args = (mediaInfo, ))
         t.start()
         t.join(10)
         self.showVideoInfo()
+        return True
         
     def showVideoInfo(self):
         topVideoInfo = Toplevel()
@@ -176,10 +177,9 @@ class OptionsField:
         
         self.entVariable['List Name'].set('{filename}'.format(filename = datetime.today().strftime("%Y%m%d_%H%M")))
         
-        self.argsList = ["-ofps 29.97 -vf harddup -ovc x264 -x264encopts bitrate=1000 -oac mp3lame -lameopts abr:br=128",
+        self.argsList = ["-ofps 29.97 -vf harddup -oac mp3lame -lameopts abr:br=128 -ovc x264 -x264encopts bitrate=",
                          "-ovc copy -oac mp3lame -lameopts abr:br=128",
-                         "-ofps 29.97 -vf harddup -ovc x264 -x264encopts bitrate=2500 -oac mp3lame -lameopts abr:br=128",
-                         "-ofps 29.97 -vf harddup -ovc x264 -x264encopts bitrate=3000 -oac pcm"]
+                         "-ofps 29.97 -vf harddup -oac pcm -ovc x264 -x264encopts bitrate="]
         self.entVariable[self.optionsText[2]] = StringVar()
         self.lbl[self.optionsText[2]] = ttk.Label(self.fmelbl, text = self.optionsText[2])
         self.cmbox = ttk.Combobox(self.fmelbl,
@@ -195,6 +195,9 @@ class OptionsField:
         
     def getMencoderArgs(self):
         return self.entVariable[self.optionsText[2]].get()
+    
+    def setMencoderArgs(self, value):
+        self.entVariable[self.optionsText[2]].set(value)
     
     def getRenameChkBtnValue(self):
         return self.chkBtnValue[self.optionsText[0]].get()
@@ -352,8 +355,10 @@ class ClipListGenerator:
                         ("All Files", "*"))
         self.fileSelectionField.setDialogDefaultFileTypes(fileTypeList)
         
-        self.clipListField.btn[self.clipListField.btnText[2]].configure(command = self.btnGenerate)
+        self.clipListField.btn[self.clipListField.btnText[2]].configure(command = self.btnGenerate, state = 'disabled')
         self.clipListField.btn[self.clipListField.btnText[3]].configure(command = self.btnReset)
+        
+        self.fileSelectionField.button.configure(command = self.btnAskOpenFile)
         
     def btnGenerate(self):
         clipListFileName = os.path.join(os.path.sep, 
@@ -389,6 +394,26 @@ class ClipListGenerator:
         self.clipListField.endNode = self.clipListField.createNode('')
         self.clipListField.setNodeData(self.clipListField.endNode, 'No.\tStart\t\tEnd\t\tDuration\t\tDifference')
         self.fileSelectionField.clearFileNameEntry()
+        self.clipListField.btn[self.clipListField.btnText[2]].configure(state = 'disabled')
+        
+    def btnAskOpenFile(self):
+        if not self.fileSelectionField.btnAskOpenFile():
+            print("File is not specified.")
+            return
+        
+        videoFormat = {'.avi' : 0,
+                       '.wmv' : 0,
+                       '.mp4' : 1,
+                       '.mov' : 2}
+        fileExt = self.fileSelectionField.getExtentionName()
+        if str.lower(fileExt) in videoFormat:
+            self.optionsField.setDefaultArgs(videoFormat[fileExt])
+        else:
+            self.optionsField.setDefaultArgs(1)
+        
+        if str.lower(fileExt) == '.wmv' or str.lower(fileExt) == '.mov':
+            self.optionsField.setMencoderArgs(self.optionsField.getMencoderArgs() + str(int(int(self.fileSelectionField.infoValue['BITRATE'].get()) / 1000 / 5 * 4)))
+        self.clipListField.btn[self.clipListField.btnText[2]].configure(state = 'enabled')
         
 class VideoSplitter:
     def __init__(self, master):
@@ -411,7 +436,13 @@ class VideoSplitter:
     def btnStartSplitting(self):
         self.btn.configure(text = 'Processing...', state = 'disabled')
         
-        jobListFile = open(self.fileSelectionField.getFullName(), "r")
+        try:
+            jobListFile = open(self.fileSelectionField.getFullName(), "r")
+        except FileNotFoundError:
+            print("FileNotFound Error")
+            self.btn.configure(text = 'Start', state = 'enabled')            
+            return
+        
         try:
             while True:
                 clipListFileName = jobListFile.readline().rstrip()
