@@ -5,12 +5,12 @@ Created on 2013/1/1
 '''
 
 import os
-import ttk
 import re
 import subprocess
 import platform
 from time import sleep
-from tkinter import *
+from tkinter import ttk
+from tkinter import messagebox
 from tkinter.filedialog import *
 from datetime import *
 from threading import Thread
@@ -72,8 +72,12 @@ class FileSelectionField:
     def btnAskOpenFile(self):
         self.fullName.set(askopenfilename(initialdir = '~',
                                           filetypes = self.typeList))
+        if self.fullName.get() == '':
+            messagebox.showinfo(message = 'No file is selected', icon = 'warning', type = 'ok', title = 'Warning')
+            return False
         self.filePath, self.fileName = os.path.split(self.fullName.get())
         self.fileNameSplit = os.path.splitext(self.fileName)
+        return True
                 
     def setDialogDefaultFileTypes(self, list):
         self.typeList = list
@@ -102,15 +106,14 @@ class VideoFileSelectionField(FileSelectionField):
         self.multimedia = MultimediaTool()
         
     def btnAskOpenFile(self):
-        FileSelectionField.btnAskOpenFile(self)
-        if self.fullName.get() == '':
+        if not FileSelectionField.btnAskOpenFile(self):
             return False
-        self.multimedia.mediaPlayer(self.fullName.get(), '')
-        mediaInfo = self.multimedia.mediaInfo(self.fullName.get())
-        t = Thread(target = self.readVideoInfoThread, args = (mediaInfo, ))
-        t.start()
-        t.join(10)
-        self.showVideoInfo()
+        #self.multimedia.mediaPlayer(self.fullName.get(), '')
+        #mediaInfo = self.multimedia.mediaInfo(self.fullName.get())
+        #t = Thread(target = self.readVideoInfoThread, args = (mediaInfo, ))
+        #t.start()
+        #t.join(10)
+        #self.showVideoInfo()
         return True
         
     def showVideoInfo(self):
@@ -308,6 +311,8 @@ class ClipListField(ListField):
         for i in range(len(self.videoPosText) - 1):
             if self.videoPosVar[self.videoPosText[i]].get() == '' or re.match("^([0-2][0-3])([0-5]\d){2}$", self.videoPosVar[self.videoPosText[i]].get()) == None:
                 self.ent[self.videoPosText[i]].focus()
+                messagebox.showinfo(message = "Format: [HHMMSS]\nHH should be between 0 and 23, \nand MM and SS should be between 00 and 59. \nAll characters should be digital.",
+                                    icon = 'error', type = 'ok', title = 'Incorrect Position Format')
                 return False
         return True
     
@@ -317,7 +322,8 @@ class ClipListField(ListField):
             videoPosition[self.videoPosText[i]] = datetime.strptime(self.videoPosVar[self.videoPosText[i]].get(), "%H%M%S")
             
         if videoPosition[self.videoPosText[1]] < videoPosition[self.videoPosText[0]]:
-            print("End position is before start position")
+            messagebox.showinfo(message = "End position is before start position", 
+                                icon = 'error', type = 'ok', title = 'Incorrect Position')
             return False
         self.endNode = ClipListField.createNode(self, '')
         ClipListField.setNodeData(self, self.endNode, 
@@ -398,7 +404,6 @@ class ClipListGenerator:
         
     def btnAskOpenFile(self):
         if not self.fileSelectionField.btnAskOpenFile():
-            print("File is not specified.")
             return
         
         videoFormat = {'.avi' : 0,
@@ -411,8 +416,8 @@ class ClipListGenerator:
         else:
             self.optionsField.setDefaultArgs(1)
         
-        if str.lower(fileExt) == '.wmv' or str.lower(fileExt) == '.mov':
-            self.optionsField.setMencoderArgs(self.optionsField.getMencoderArgs() + str(int(int(self.fileSelectionField.infoValue['BITRATE'].get()) / 1000 / 5 * 4)))
+        #if str.lower(fileExt) == '.wmv' or str.lower(fileExt) == '.mov':
+        #    self.optionsField.setMencoderArgs(self.optionsField.getMencoderArgs() + str(int(int(self.fileSelectionField.infoValue['BITRATE'].get()) / 1000 / 5 * 4)))
         self.clipListField.btn[self.clipListField.btnText[2]].configure(state = 'enabled')
         
 class VideoSplitter:
@@ -435,11 +440,12 @@ class VideoSplitter:
     
     def btnStartSplitting(self):
         self.btn.configure(text = 'Processing...', state = 'disabled')
+        self.clipListField.deleteNodes()
         
         try:
             jobListFile = open(self.fileSelectionField.getFullName(), "r")
         except FileNotFoundError:
-            print("FileNotFound Error")
+            messagebox.showinfo(message = 'File not found', icon = 'error', type = 'ok', title = 'Error')
             self.btn.configure(text = 'Start', state = 'enabled')            
             return
         
